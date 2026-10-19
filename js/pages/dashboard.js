@@ -52,23 +52,84 @@ export function render(main) {
     },
     options: {
       maintainAspectRatio: false,
+      layout: { padding: { top: 18 } },
       plugins: { tooltip: { callbacks: { title: (items) => projects[items[0].dataIndex].name, label: (c) => `${c.dataset.label}: ${fmtMoney(c.raw)}` } } },
-      scales: { y: { beginAtZero: true, ticks: { callback: (v) => fmtMoney(v, { compact: true }) } }, x: { grid: { display: false } } },
+      scales: { y: { beginAtZero: true, grace: '8%', ticks: { callback: (v) => fmtMoney(v, { compact: true }) } }, x: { grid: { display: false } } },
     },
+    plugins: [barValueLabels],
   });
 
   const all = store.all('tasks');
+  const statusCounts = Object.keys(TASK_STATUS).map((k) => all.filter((t) => t.status === k).length);
   chart(main.querySelector('#ch-status'), {
     type: 'doughnut',
     data: {
-      labels: Object.values(TASK_STATUS).map((m) => m.label),
-      datasets: [{ data: Object.keys(TASK_STATUS).map((k) => all.filter((t) => t.status === k).length), backgroundColor: Object.values(TASK_STATUS).map((m) => m.color), borderWidth: 0 }],
+      labels: Object.values(TASK_STATUS).map((m, i) => `${m.label} (${statusCounts[i]})`),
+      datasets: [{ data: statusCounts, backgroundColor: Object.values(TASK_STATUS).map((m) => m.color), borderWidth: 0 }],
     },
-    options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'bottom' } } },
+    options: {
+      maintainAspectRatio: false,
+      cutout: '58%',
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => ` ${Object.values(TASK_STATUS)[c.dataIndex].label}: ${c.raw} task${c.raw === 1 ? '' : 's'}` } },
+      },
+    },
+    plugins: [sliceValueLabels],
   });
 
   return 'Dashboard';
 }
+
+// ---- Chart.js label plugins -------------------------------------------------
+
+// Writes each bar's amount (compact currency, e.g. ₱4.5M) just above the bar,
+// shrinking the font on narrow screens so neighbouring labels don't collide.
+const LABEL_FONT = (px) => `600 ${px}px Inter, ui-sans-serif, system-ui, sans-serif`;
+const barValueLabels = {
+  id: 'barValueLabels',
+  afterDatasetsDraw(c) {
+    const { ctx } = c;
+    ctx.save();
+    ctx.fillStyle = window.Chart.defaults.color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    c.data.datasets.forEach((ds, i) => {
+      if (!c.isDatasetVisible(i)) return;
+      c.getDatasetMeta(i).data.forEach((bar, j) => {
+        const v = Number(ds.data[j]) || 0;
+        if (!v) return;
+        const text = fmtMoney(v, { compact: true });
+        ctx.font = LABEL_FONT(10);
+        const px = Math.max(7, Math.min(10, Math.floor((10 * (bar.width + 4)) / ctx.measureText(text).width)));
+        ctx.font = LABEL_FONT(px);
+        ctx.fillText(text, bar.x, bar.y - 3);
+      });
+    });
+    ctx.restore();
+  },
+};
+
+// Writes each slice's count in the middle of the slice.
+const sliceValueLabels = {
+  id: 'sliceValueLabels',
+  afterDatasetsDraw(c) {
+    const { ctx } = c;
+    const ds = c.data.datasets[0];
+    ctx.save();
+    ctx.font = '600 12px Inter, ui-sans-serif, system-ui, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    c.getDatasetMeta(0).data.forEach((arc, i) => {
+      const v = Number(ds.data[i]) || 0;
+      if (!v || !c.getDataVisibility(i)) return;
+      const { x, y } = arc.tooltipPosition();
+      ctx.fillText(String(v), x, y);
+    });
+    ctx.restore();
+  },
+};
 
 function healthTable(stats) {
   return `<div class="-mx-4 overflow-x-auto px-4"><table class="w-full min-w-[640px] text-sm">
