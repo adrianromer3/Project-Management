@@ -12,7 +12,8 @@ Client-side project management app. Plain HTML + Tailwind CDN + vanilla ES modul
 - Collections: `projects`, `tasks` (`projectId`), `costs` (`projectId`). Deleting a project cascades to its tasks and costs.
 - Derived numbers (progress, health, spent, overdue) come from `store.projectStats(p)` and are never stored.
 - Each page module exports `render(main, ...)`, which returns the page title.
-- Routes: `#/dashboard`, `#/projects`, `#/projects/:id/(board|list|timeline|budget)`, `#/settings`.
+- Routes: `#/dashboard`, `#/projects`, `#/projects/:id/(board|list|timeline|budget)`, `#/gantt`, `#/settings`.
+- "On-going" means `status !== 'completed'`. All Gantt charts go through `gantt(rows)` in `js/gantt.js`.
 - Dates are ISO `YYYY-MM-DD` strings in local time. Use the helpers in `js/util.js`.
 - Always pass user text through `esc()` before putting it in HTML.
 - Forms use `formModal({ title, fields, validate, deletable })` from `js/ui.js`.

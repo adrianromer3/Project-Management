@@ -1,12 +1,13 @@
 // Project detail: header + summary, then Board / List / Timeline / Budget tabs.
 
 import * as store from '../store.js';
-import { esc, sum, today, addDays, daysBetween, isoDate, byDue } from '../util.js';
+import { esc, sum, today, addDays, daysBetween, byDue } from '../util.js';
 import {
   PROJECT_STATUS, TASK_STATUS, PRIORITY, HEALTH, COST_CATEGORY, options,
   badge, progressBar, kpi, card, empty, initials, fmtMoney, fmtDate, fmtPct, formModal, confirmDialog, toast,
 } from '../ui.js';
 import { editProject, deleteProject } from './projects.js';
+import { gantt, taskBar, sortTasks, legend } from '../gantt.js';
 
 const TABS = [['board', 'Board'], ['list', 'List'], ['timeline', 'Timeline'], ['budget', 'Budget']];
 
@@ -169,74 +170,19 @@ function list(el, p, s) {
 // ---- Timeline (Gantt) --------------------------------------------------------
 
 function timeline(el, p, s) {
-  const items = s.tasks
-    .filter((t) => t.due || t.start)
-    .map((t) => ({ t, start: t.milestone ? (t.due || t.start) : (t.start || t.due), end: t.due || t.start }))
-    .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
-  const dates = [p.start, p.end, ...items.flatMap((i) => [i.start, i.end])].filter(Boolean).sort();
-  if (!dates.length) {
+  const rows = [
+    { label: `<span class="font-semibold">${esc(p.code)} · Project</span>`, bars: p.start && p.end ? [{ kind: 'span', start: p.start, end: p.end, tip: `${fmtDate(p.start)} – ${fmtDate(p.end)}` }] : [] },
+    ...sortTasks(s.tasks).map((t) => ({
+      label: `<button data-edit="${t.id}" class="w-full truncate text-left hover:text-sky-600" title="${esc(t.title)}">${esc(t.title)}</button>`,
+      bars: [taskBar(t)],
+    })),
+  ];
+  const chartHtml = gantt(rows);
+  if (!chartHtml) {
     el.innerHTML = empty('Nothing to plot', 'Give the project or its tasks some dates to see the timeline.');
     return;
   }
-
-  const min = addDays(dates[0], -3);
-  const max = addDays(dates[dates.length - 1], 3);
-  const total = daysBetween(min, max) + 1;
-  const pos = (iso) => (daysBetween(min, iso) / total) * 100;
-  const span = (a, b) => ((daysBetween(a, b) + 1) / total) * 100;
-  const t0 = today();
-
-  const months = [];
-  const d = new Date(`${min}T00:00:00`);
-  d.setDate(1);
-  while (isoDate(d) <= max) {
-    const next = new Date(d);
-    next.setMonth(next.getMonth() + 1);
-    const a = isoDate(d) < min ? min : isoDate(d);
-    const lastDay = addDays(isoDate(next), -1);
-    const b = lastDay > max ? max : lastDay;
-    months.push({ label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }), left: pos(a), width: span(a, b) });
-    d.setTime(next.getTime());
-  }
-
-  const bar = ({ t, start, end }) => {
-    const color = TASK_STATUS[t.status]?.color || '#94a3b8';
-    const late = t.status !== 'done' && t.due && t.due < t0;
-    const tip = `${t.title} · ${TASK_STATUS[t.status]?.label || t.status} · ${fmtDate(start)} – ${fmtDate(end)}`;
-    if (t.milestone) {
-      return `<div class="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rotate-45 ${t.status === 'done' ? 'bg-emerald-500' : 'bg-rose-500'}" style="left:${pos(end) + span(end, end) / 2}%" title="${esc(tip)}"></div>`;
-    }
-    const fill = t.status === 'done' ? 100 : Number(t.progress) || 0;
-    return `<div class="absolute top-1/2 h-4 -translate-y-1/2 overflow-hidden rounded ${late ? 'ring-2 ring-rose-500' : ''}" style="left:${pos(start)}%;width:${Math.max(span(start, end), 0.6)}%;background:${color}40" title="${esc(tip)}">
-      <div class="h-full" style="width:${fill}%;background:${color}"></div></div>`;
-  };
-
-  const LABEL_W = 'w-48 sm:w-60';
-  el.innerHTML = `<div class="card overflow-x-auto"><div class="min-w-[760px]">
-    <div class="flex border-b border-slate-200 dark:border-slate-800">
-      <div class="${LABEL_W} shrink-0 px-4 py-2 text-xs font-medium text-slate-500 dark:text-slate-400">Task</div>
-      <div class="relative h-8 flex-1">${months.map((m) => `<div class="absolute inset-y-0 truncate border-l border-slate-200 px-1.5 pt-2 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400" style="left:${m.left}%;width:${m.width}%">${esc(m.label)}</div>`).join('')}</div>
-    </div>
-    <div class="relative">
-      ${row(`<span class="font-semibold">${esc(p.code)} · Project</span>`, p.start && p.end ? `<div class="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-slate-400 dark:bg-slate-600" style="left:${pos(p.start)}%;width:${span(p.start, p.end)}%" title="${esc(`${fmtDate(p.start)} – ${fmtDate(p.end)}`)}"></div>` : '')}
-      ${items.map((i) => row(`<button data-edit="${i.t.id}" class="w-full truncate text-left hover:text-sky-600" title="${esc(i.t.title)}">${esc(i.t.title)}</button>`, bar(i))).join('')}
-    </div>
-  </div></div>
-  <div class="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-    ${Object.values(TASK_STATUS).map((m) => `<span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm" style="background:${m.color}"></span>${m.label}</span>`).join('')}
-    <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rotate-45 bg-rose-500"></span>Milestone</span>
-    <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ring-2 ring-rose-500"></span>Overdue</span>
-    <span class="flex items-center gap-1.5"><span class="h-3 w-0.5 bg-rose-500"></span>Today</span>
-  </div>`;
-
-  function row(label, track) {
-    const grid = months.map((m) => `<div class="absolute inset-y-0 border-l border-slate-100 dark:border-slate-800/70" style="left:${m.left}%"></div>`).join('');
-    const now = t0 >= min && t0 <= max ? `<div class="absolute inset-y-0 w-0.5 bg-rose-500/70" style="left:${pos(t0)}%"></div>` : '';
-    return `<div class="flex h-10 items-center border-b border-slate-100 last:border-0 dark:border-slate-800/60">
-      <div class="${LABEL_W} shrink-0 px-4 text-sm">${label}</div>
-      <div class="relative h-full flex-1">${grid}${now}${track}</div></div>`;
-  }
-
+  el.innerHTML = `<div class="card">${chartHtml}</div>${legend()}`;
   el.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openTask(p, store.get('tasks', b.dataset.edit))));
 }
 

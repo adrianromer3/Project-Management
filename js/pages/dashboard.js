@@ -4,6 +4,7 @@ import * as store from '../store.js';
 import { esc, sum, today, addDays, byDue } from '../util.js';
 import { HEALTH, PROJECT_STATUS, TASK_STATUS, PRIORITY, badge, progressBar, kpi, card, empty, chart, initials, fmtMoney, fmtDate, fmtPct } from '../ui.js';
 import { newProject } from './projects.js';
+import { gantt, projectBars, legend } from '../gantt.js';
 
 export function render(main) {
   const projects = [...store.all('projects')].sort((a, b) => String(a.code).localeCompare(String(b.code)));
@@ -34,9 +35,9 @@ export function render(main) {
     <div class="${row}">
       ${kpi('Active projects', projects.filter((p) => p.status === 'active').length, `${projects.length} total`)}
       ${kpi('Open tasks', open.length, `${overdue.length} overdue`, overdue.length ? 'text-rose-600' : '')}
-      ${kpi('Project Progress', fmtPct(avgProgress), 'average across open projects', '', { after: `<div class="mt-2">${progressBar(avgProgress)}</div>` })}
+      ${kpi('Project Progress', fmtPct(avgProgress), 'average across on-going projects', '', { after: `<div class="mt-2">${progressBar(avgProgress)}</div>` })}
     </div>
-    <h2 class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Budget · open projects</h2>
+    <h2 class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Budget · on-going projects</h2>
     <div class="${row}">
       ${kpi('Total Budget', fmtMoney(budget, { compact: true }), fmtMoney(budget), '', budgetTile)}
       ${kpi('Actual Spent', fmtMoney(spent, { compact: true }), `${fmtMoney(Math.abs(remaining), { compact: true })} ${remaining < 0 ? 'over budget' : 'remaining'}`, remaining < 0 ? 'text-rose-600' : '', budgetTile)}
@@ -46,6 +47,7 @@ export function render(main) {
       ${card('Budget vs actual', '<div class="h-64"><canvas id="ch-budget" aria-label="Budget versus actual spend per project"></canvas></div>', 'lg:col-span-2')}
       ${card('Tasks by status', '<div class="h-64"><canvas id="ch-status" aria-label="Tasks by status"></canvas></div>')}
     </div>
+    ${card('Project Gantt Chart', portfolioGantt(live), 'mt-4', '<a href="#/gantt" class="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">Full Gantt chart →</a>')}
     ${card('Project health', healthTable(stats), 'mt-4')}
     <div class="mt-4 grid gap-4 lg:grid-cols-2">
       ${card(`Overdue tasks (${overdue.length})`, taskList(overdue, 'Nothing overdue.'))}
@@ -141,6 +143,18 @@ const sliceValueLabels = {
     ctx.restore();
   },
 };
+
+// One row per on-going project: bar coloured by health and filled to progress, milestones as ◆.
+function portfolioGantt(live) {
+  const html = gantt(live.map(({ p, s }) => ({
+    tall: true,
+    label: `<a href="#/projects/${p.id}/timeline" class="block min-w-0 hover:text-sky-600">
+      <span class="block truncate font-medium text-slate-900 dark:text-white"><span class="text-slate-500">${esc(p.code)}</span> ${esc(p.name)}</span>
+      <span class="block truncate text-xs text-slate-500 dark:text-slate-400">${esc(p.manager || 'Unassigned')} · ${fmtPct(s.progress)}</span></a>`,
+    bars: projectBars(p, s),
+  })), { labelHeader: 'Project' });
+  return html ? `${html}${legend({ tasks: false, health: true })}` : '<p class="text-sm text-slate-500">No on-going projects with dates.</p>';
+}
 
 function healthTable(stats) {
   return `<div class="-mx-4 overflow-x-auto px-4"><table class="w-full min-w-[780px] text-sm">

@@ -31,9 +31,9 @@ export const PRIORITY = {
   urgent: { label: 'Urgent', cls: ROSE },
 };
 export const HEALTH = {
-  'on-track': { label: 'On track', cls: GREEN },
-  'at-risk': { label: 'At risk', cls: AMBER },
-  'off-track': { label: 'Off track', cls: ROSE },
+  'on-track': { label: 'On track', cls: GREEN, color: '#10b981' },
+  'at-risk': { label: 'At risk', cls: AMBER, color: '#f59e0b' },
+  'off-track': { label: 'Off track', cls: ROSE, color: '#f43f5e' },
 };
 export const COST_CATEGORY = {
   labor: { label: 'Labour' },

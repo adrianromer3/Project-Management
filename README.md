@@ -6,7 +6,8 @@ Plain HTML, Tailwind CSS (CDN), vanilla JavaScript ES modules and Chart.js. **No
 
 ## Features
 
-- **Dashboard**: active projects, open and overdue tasks, portfolio budget used, average progress, budget vs actual chart, task status mix, a project health table, and lists of overdue and upcoming tasks.
+- **Dashboard**: active projects, open and overdue tasks, project progress, a highlighted budget row (total budget, actual spent, budget utilization), budget vs actual chart, task status mix, a Gantt chart with one row per on-going project, a project health table with project managers, and lists of overdue and upcoming tasks.
+- **Gantt chart (all)**: every on-going project with its tasks on one timeline. Opened from the sidebar under On-going Projects.
 - **Projects**: searchable, filterable cards with health, progress, task counts and budget used.
 - **Project detail**, with four views:
   - **Board**: Kanban (To do → In progress → Review → Done) with drag and drop.
@@ -49,5 +50,6 @@ js/app.js           Hash router, nav, theme, drawer
 js/store.js         localStorage data store, CRUD, import/export, metrics, sample data
 js/ui.js            Labels/colours, formatters, HTML builders, modals, toasts, charts
 js/util.js          Escaping, dates, ids
-js/pages/           dashboard, projects, project (board/list/timeline/budget), settings
+js/gantt.js         Shared Gantt renderer (project timeline, dashboard, Gantt page)
+js/pages/           dashboard, projects, project (board/list/timeline/budget), gantt, settings
 ```
