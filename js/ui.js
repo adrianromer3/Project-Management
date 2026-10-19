@@ -70,11 +70,13 @@ export function progressBar(pct, color = 'bg-sky-500') {
   return `<div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar" aria-valuenow="${Math.round(w)}" aria-valuemin="0" aria-valuemax="100"><div class="h-full rounded-full ${color}" style="width:${w}%"></div></div>`;
 }
 
-export function kpi(label, value, sub = '', subCls = '') {
-  return `<div class="card p-4">
+// `cls` adds classes to the tile; `after` is extra HTML under the value (e.g. a progress bar).
+export function kpi(label, value, sub = '', subCls = '', { cls = '', after = '' } = {}) {
+  return `<div class="card p-4 ${cls}">
     <div class="text-xs font-medium text-slate-500 dark:text-slate-400">${esc(label)}</div>
     <div class="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">${esc(value)}</div>
     ${sub ? `<div class="mt-0.5 text-xs ${subCls || 'text-slate-500 dark:text-slate-400'}">${esc(sub)}</div>` : ''}
+    ${after}
   </div>`;
 }
 
