@@ -1,28 +1,45 @@
 // localStorage-backed data store. Three collections (projects, tasks, costs) plus settings.
 // Every write goes through commit(), which saves and notifies subscribers (the app re-renders).
-// Settings also hold the areas (each with an area manager) and the current "viewing as" scope.
+// Settings also hold the regions (each with an area manager) and the current "viewing as" scope.
 
 import { uid, clamp, sum, today, addDays, daysBetween } from './util.js';
 
 const KEY = 'pm:v1:data';
+const VERSION = 2;
 const COLLECTIONS = ['projects', 'tasks', 'costs'];
-const DEFAULT_SETTINGS = { currency: 'PHP', areas: [], viewAs: { role: 'head' } };
+export const REGIONS = ['Metro North', 'Metro South', 'Visayas', 'Mindanao', 'North Luzon', 'South Luzon'];
+const DEFAULT_SETTINGS = { currency: 'PHP', regions: [], viewAs: { role: 'head' } };
 const listeners = new Set();
 
 let state = load();
 
 function blank() {
-  return { version: 1, settings: { ...DEFAULT_SETTINGS }, projects: [], tasks: [], costs: [] };
+  return { version: VERSION, settings: { ...DEFAULT_SETTINGS, regions: REGIONS.map((name) => ({ name, manager: '' })) }, projects: [], tasks: [], costs: [] };
 }
 
+// Also upgrades saved data and imported backups from older versions.
 function normalize(d) {
   const s = blank();
   if (!d || typeof d !== 'object') return s;
   for (const c of COLLECTIONS) s[c] = Array.isArray(d[c]) ? d[c] : [];
   s.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
-  if (!Array.isArray(s.settings.areas)) s.settings.areas = [];
+  if ((Number(d.version) || 1) < 2) migrateAreasToRegions(s);
+  if (!Array.isArray(s.settings.regions)) s.settings.regions = [];
   if (!s.settings.viewAs?.role) s.settings.viewAs = { role: 'head' };
   return s;
+}
+
+// v1 called regions "areas" (settings.areas, project.area, viewAs.area). Existing areas
+// are kept as regions, and the standard regions are added after them.
+function migrateAreasToRegions(s) {
+  const old = Array.isArray(s.settings.areas) ? s.settings.areas : [];
+  s.settings.regions = [...old, ...REGIONS.filter((n) => !old.some((a) => a.name === n)).map((name) => ({ name, manager: '' }))];
+  delete s.settings.areas;
+  s.projects.forEach((p) => {
+    if ('area' in p) { p.region = p.area || ''; delete p.area; }
+  });
+  const v = s.settings.viewAs;
+  if (v?.role === 'area') s.settings.viewAs = { role: 'area', region: v.area };
 }
 
 function load() {
@@ -81,48 +98,48 @@ export function remove(c, id) {
 export const settings = () => state.settings;
 export function setSettings(patch) { Object.assign(state.settings, patch); commit(); }
 
-// ---- Areas & viewing scope ------------------------------------------------
-// Hierarchy: Head Office sees every project, an Area Manager sees the projects
-// in their area, a Project Manager sees the projects they manage.
+// ---- Regions & viewing scope ----------------------------------------------
+// Hierarchy: Head Office sees every region, an Area Manager sees the projects
+// in their region, a Project Manager sees only the projects they manage.
 
 export const ROLES = { head: 'Head Office', area: 'Area Manager', pm: 'Project Manager' };
 
-export const areas = () => state.settings.areas;
-export const areaOf = (p) => areas().find((a) => a.name === p.area);
+export const regions = () => state.settings.regions;
+export const regionOf = (p) => regions().find((r) => r.name === p.region);
 
-// Saving under a new name moves that area's projects (and the current scope) along with it.
-export function saveArea(oldName, area) {
-  const list = state.settings.areas;
-  const i = list.findIndex((a) => a.name === oldName);
-  if (i >= 0) list[i] = area; else list.push(area);
-  if (oldName && oldName !== area.name) {
-    state.projects.forEach((p) => { if (p.area === oldName) p.area = area.name; });
-    if (state.settings.viewAs.area === oldName) state.settings.viewAs = { role: 'area', area: area.name };
+// Saving under a new name moves that region's projects (and the current scope) along with it.
+export function saveRegion(oldName, region) {
+  const list = state.settings.regions;
+  const i = list.findIndex((r) => r.name === oldName);
+  if (i >= 0) list[i] = region; else list.push(region);
+  if (oldName && oldName !== region.name) {
+    state.projects.forEach((p) => { if (p.region === oldName) p.region = region.name; });
+    if (state.settings.viewAs.region === oldName) state.settings.viewAs = { role: 'area', region: region.name };
   }
   commit();
 }
 
-export function removeArea(name) {
-  state.settings.areas = state.settings.areas.filter((a) => a.name !== name);
-  state.projects.forEach((p) => { if (p.area === name) p.area = ''; });
-  if (state.settings.viewAs.area === name) state.settings.viewAs = { role: 'head' };
+export function removeRegion(name) {
+  state.settings.regions = state.settings.regions.filter((r) => r.name !== name);
+  state.projects.forEach((p) => { if (p.region === name) p.region = ''; });
+  if (state.settings.viewAs.region === name) state.settings.viewAs = { role: 'head' };
   commit();
 }
 
 export const projectManagers = () => [...new Set(state.projects.map((p) => p.manager).filter(Boolean))].sort();
 
-// A saved scope whose area or project manager no longer exists falls back to Head Office,
+// A saved scope whose region or project manager no longer exists falls back to Head Office,
 // so the dashboard never filters on someone the "Viewing as" menu can't show.
 export function viewAs() {
   const v = state.settings.viewAs;
-  if (v.role === 'area' && areas().some((a) => a.name === v.area)) return v;
+  if (v.role === 'area' && regions().some((r) => r.name === v.region)) return v;
   if (v.role === 'pm' && projectManagers().includes(v.manager)) return v;
   return { role: 'head' };
 }
 export function setViewAs(v) { state.settings.viewAs = v; commit(); }
 
 export function inScope(p, v = viewAs()) {
-  if (v.role === 'area') return p.area === v.area;
+  if (v.role === 'area') return p.region === v.region;
   if (v.role === 'pm') return p.manager === v.manager;
   return true;
 }
@@ -130,9 +147,9 @@ export function inScope(p, v = viewAs()) {
 export const visibleProjects = () => state.projects.filter((p) => inScope(p));
 
 export function scopeLabel(v = viewAs()) {
-  if (v.role === 'area') return `${ROLES.area} · ${areas().find((a) => a.name === v.area)?.manager || 'Unassigned'} (${v.area})`;
+  if (v.role === 'area') return `${ROLES.area} · ${regions().find((r) => r.name === v.region)?.manager || 'Unassigned'} (${v.region})`;
   if (v.role === 'pm') return `${ROLES.pm} · ${v.manager}`;
-  return `${ROLES.head} · All areas`;
+  return `${ROLES.head} · All regions`;
 }
 
 export function nextProjectCode() {
@@ -193,13 +210,11 @@ function sample() {
   const t0 = today();
   const d = (n) => addDays(t0, n);
   const now = new Date().toISOString();
-  s.settings.areas = [
-    { name: 'Metro Manila', manager: 'Grace Mendoza' },
-    { name: 'North Luzon', manager: 'Rafael Ortiz' },
-  ];
+  const AREA_MANAGERS = ['Grace Mendoza', 'Paolo Villanueva', 'Maria Santos', 'Rafael Ortiz', 'Jose Aquino', 'Liza Ramos'];
+  s.settings.regions = REGIONS.map((name, i) => ({ name, manager: AREA_MANAGERS[i] }));
 
-  const P = (code, name, client, manager, status, start, end, budget, description, area) => {
-    const p = { id: uid('project'), code, name, client, manager, area, status, start: d(start), end: d(end), budget, description, createdAt: now };
+  const P = (code, name, client, manager, status, start, end, budget, description, region) => {
+    const p = { id: uid('project'), code, name, client, manager, region, status, start: d(start), end: d(end), budget, description, createdAt: now };
     s.projects.push(p);
     return p.id;
   };
@@ -210,7 +225,7 @@ function sample() {
   });
   const C = (projectId, date, category, description, amount) => s.costs.push({ id: uid('cost'), projectId, date: d(date), category, description, amount, createdAt: now });
 
-  const web = P('PRJ-001', 'Website Redesign', 'Marketing', 'Ana Reyes', 'active', -30, 45, 850000, 'New public website with refreshed brand, CMS and online enquiry forms.', 'Metro Manila');
+  const web = P('PRJ-001', 'Website Redesign', 'Marketing', 'Ana Reyes', 'active', -30, 45, 850000, 'New public website with refreshed brand, CMS and online enquiry forms.', 'Metro North');
   T(web, 'Discovery & requirements', 'Ana Reyes', 'done', 'high', -30, -21);
   T(web, 'Wireframes', 'Ben Cruz', 'done', 'medium', -20, -11);
   T(web, 'Visual design', 'Ben Cruz', 'in-progress', 'high', -10, 5, 60);
@@ -237,7 +252,7 @@ function sample() {
   C(wh, -25, 'materials', 'Racking supplier deposit (50%)', 1400000);
   C(wh, -10, 'subcontract', 'Civil works progress billing #1', 2700000);
 
-  const erp = P('PRJ-003', 'ERP Rollout', 'Finance', 'Ella Tan', 'planning', 14, 150, 1200000, 'Replace spreadsheets with an ERP for purchasing, inventory and accounting.', 'Metro Manila');
+  const erp = P('PRJ-003', 'ERP Rollout', 'Finance', 'Ella Tan', 'planning', 14, 150, 1200000, 'Replace spreadsheets with an ERP for purchasing, inventory and accounting.', 'Metro North');
   T(erp, 'Vendor shortlist & demos', 'Ella Tan', 'in-progress', 'high', -7, 10, 40);
   T(erp, 'Data mapping', 'Dan Lim', 'todo', 'medium', 14, 45);
   T(erp, 'Configuration & testing', 'Carla Santos', 'todo', 'medium', 45, 110);
@@ -251,6 +266,38 @@ function sample() {
   T(net, 'Install & cut-over', 'Carla Santos', 'done', 'high', -75, -40);
   C(net, -95, 'equipment', 'Switches & access points', 248000);
   C(net, -50, 'labor', 'Weekend cut-over crew', 64000);
+
+  const depot = P('PRJ-005', 'Las Piñas Distribution Depot', 'Operations', 'Ben Cruz', 'active', -45, 90, 2800000, 'Fit out a leased depot with racking, office space and a loading dock.', 'Metro South');
+  T(depot, 'Lease & site handover', 'Ben Cruz', 'done', 'high', -45, -35);
+  T(depot, 'Office partitioning', 'Carla Santos', 'in-progress', 'medium', -20, 15, 55);
+  T(depot, 'Loading dock works', 'Dan Lim', 'in-progress', 'high', -10, 40, 20);
+  T(depot, 'Racking install', 'Carla Santos', 'todo', 'medium', 40, 80);
+  T(depot, 'Depot opening', 'Ben Cruz', 'todo', 'urgent', null, 90, 0, true);
+  C(depot, -40, 'other', 'Lease deposit', 450000);
+  C(depot, -15, 'subcontract', 'Partitioning contractor (40%)', 380000);
+
+  const cebu = P('PRJ-006', 'Cebu Branch Fit-out', 'Sales', 'Ana Reyes', 'active', -25, 60, 1600000, 'Interior fit-out of the new Cebu sales branch.', 'Visayas');
+  T(cebu, 'Design approval', 'Ana Reyes', 'done', 'high', -25, -18);
+  T(cebu, 'Ceiling & lighting', 'Ben Cruz', 'in-progress', 'medium', -12, 8, 45);
+  T(cebu, 'Furniture delivery', 'Ella Tan', 'todo', 'medium', 20, 40);
+  T(cebu, 'Branch handover', 'Ana Reyes', 'todo', 'high', null, 60, 0, true);
+  C(cebu, -20, 'subcontract', 'Fit-out contractor mobilisation', 420000);
+  C(cebu, -6, 'materials', 'Lighting fixtures', 180000);
+
+  const davao = P('PRJ-007', 'Davao Warehouse Roofing', 'Operations', 'Dan Lim', 'planning', 10, 75, 950000, 'Replace the warehouse roof sheets and gutters before the rainy season.', 'Mindanao');
+  T(davao, 'Roof inspection report', 'Dan Lim', 'in-progress', 'high', -5, 9, 50);
+  T(davao, 'Contractor bidding', 'Ella Tan', 'todo', 'medium', 10, 30);
+  T(davao, 'Roof replacement', 'Dan Lim', 'todo', 'high', 30, 70);
+  T(davao, 'Final inspection', 'Dan Lim', 'todo', 'medium', null, 75, 0, true);
+
+  const lag = P('PRJ-008', 'Laguna Plant Safety Upgrade', 'Manufacturing', 'Ella Tan', 'active', -35, 30, 700000, 'Fire suppression, emergency lighting and signage across the plant.', 'South Luzon');
+  T(lag, 'Safety audit', 'Ella Tan', 'done', 'high', -35, -28);
+  T(lag, 'Fire suppression install', 'Carla Santos', 'in-progress', 'urgent', -20, -2, 70);
+  T(lag, 'Emergency lighting', 'Ben Cruz', 'in-progress', 'medium', -10, 12, 40);
+  T(lag, 'Fire drill & sign-off', 'Ella Tan', 'todo', 'high', null, 30, 0, true);
+  C(lag, -25, 'equipment', 'Sprinkler heads & pumps', 410000);
+  C(lag, -8, 'labor', 'Installation crew', 260000);
+
 
   return s;
 }

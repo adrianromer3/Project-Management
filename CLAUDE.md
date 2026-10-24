@@ -13,7 +13,9 @@ Client-side project management app. Plain HTML + Tailwind CDN + vanilla ES modul
 - Derived numbers (progress, health, spent, overdue) come from `store.projectStats(p)` and are never stored.
 - Each page module exports `render(main, ...)`, which returns the page title.
 - Routes: `#/dashboard`, `#/projects`, `#/projects/:id/(board|list|timeline|budget)`, `#/gantt`, `#/settings`.
-- Viewing hierarchy: `settings.areas` holds `{ name, manager }`; each project has an `area`. `settings.viewAs` is `{ role: 'head' }`, `{ role: 'area', area }` or `{ role: 'pm', manager }`. Pages list projects with `store.visibleProjects()` (never `all('projects')`), and scope tasks to those project ids.
+- Viewing hierarchy: `settings.regions` holds `{ name, manager }` (the manager is the region's Area Manager; defaults in `store.REGIONS`); each project has a `region`. `settings.viewAs` is `{ role: 'head' }`, `{ role: 'area', region }` or `{ role: 'pm', manager }`. The dashboard breaks each level down one level lower: Head Office by region, Area Manager by project manager, Project Manager by project. Pages list projects with `store.visibleProjects()` (never `all('projects')`), and scope tasks to those project ids.
+- Saved data is versioned (`VERSION` in `store.js`); `normalize()` upgrades older saves and imported backups (v1 used `areas`/`area`).
+
 - "On-going" means `status !== 'completed'`. All Gantt charts go through `gantt(rows)` in `js/gantt.js`.
 - Dates are ISO `YYYY-MM-DD` strings in local time. Use the helpers in `js/util.js`.
 - Always pass user text through `esc()` before putting it in HTML.

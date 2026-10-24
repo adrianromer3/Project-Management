@@ -59,23 +59,24 @@ function renderNav(active) {
 }
 
 // ---- Viewing as (Head Office → Area Manager → Project Manager) --------------
-// Option values: "head", "area:<area name>", "pm:<manager name>".
+// Option values: "head", "area:<region name>", "pm:<manager name>".
 
 const viewAsSelect = document.getElementById('view-as');
 
 function renderViewAs() {
   const v = store.viewAs();
-  const cur = v.role === 'area' ? `area:${v.area}` : v.role === 'pm' ? `pm:${v.manager}` : 'head';
+  const cur = v.role === 'area' ? `area:${v.region}` : v.role === 'pm' ? `pm:${v.manager}` : 'head';
   const opt = (value, label) => `<option value="${esc(value)}" ${value === cur ? 'selected' : ''}>${esc(label)}</option>`;
-  viewAsSelect.innerHTML = `${opt('head', `${store.ROLES.head} (all areas)`)}
-    <optgroup label="${store.ROLES.area}">${store.areas().map((a) => opt(`area:${a.name}`, `${a.manager || 'Unassigned'} · ${a.name}`)).join('')}</optgroup>
+  viewAsSelect.innerHTML = `${opt('head', `${store.ROLES.head} (all regions)`)}
+    <optgroup label="${store.ROLES.area}">${store.regions().map((r) => opt(`area:${r.name}`, `${r.name} · ${r.manager || 'No area manager'}`)).join('')}</optgroup>
     <optgroup label="${store.ROLES.pm}">${store.projectManagers().map((m) => opt(`pm:${m}`, m)).join('')}</optgroup>`;
 }
 
 viewAsSelect.addEventListener('change', (e) => {
   const [role, ...rest] = e.target.value.split(':');
   const name = rest.join(':');
-  store.setViewAs(role === 'area' ? { role, area: name } : role === 'pm' ? { role, manager: name } : { role: 'head' });
+  store.setViewAs(role === 'area' ? { role, region: name } : role === 'pm' ? { role, manager: name } : { role: 'head' });
+
 });
 
 // ---- Theme & drawer --------------------------------------------------------
