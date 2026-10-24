@@ -8,7 +8,7 @@ import { gantt, projectBars, taskBar, sortTasks, legend } from '../gantt.js';
 let showTasks = true;
 
 export function render(main) {
-  const live = store.all('projects')
+  const live = store.visibleProjects()
     .filter((p) => p.status !== 'completed')
     .sort((a, b) => String(a.code).localeCompare(String(b.code)))
     .map((p) => ({ p, s: store.projectStats(p) }));

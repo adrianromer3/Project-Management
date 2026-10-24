@@ -18,13 +18,13 @@ export function render(main) {
   const grid = main.querySelector('#grid');
   const draw = () => {
     const needle = q.trim().toLowerCase();
-    const list = store.all('projects')
+    const list = store.visibleProjects()
       .filter((p) => !status || p.status === status)
-      .filter((p) => !needle || [p.code, p.name, p.client, p.manager].some((v) => String(v || '').toLowerCase().includes(needle)))
+      .filter((p) => !needle || [p.code, p.name, p.client, p.manager, p.area].some((v) => String(v || '').toLowerCase().includes(needle)))
       .sort((a, b) => String(a.code).localeCompare(String(b.code)));
     grid.innerHTML = list.length
       ? list.map(projectCard).join('')
-      : `<div class="sm:col-span-2 xl:col-span-3">${empty(store.all('projects').length ? 'No matching projects' : 'No projects yet', store.all('projects').length ? 'Try a different search or status.' : 'Create your first project to get started.')}</div>`;
+      : `<div class="sm:col-span-2 xl:col-span-3">${empty(store.visibleProjects().length ? 'No matching projects' : 'No projects yet', store.visibleProjects().length ? 'Try a different search or status.' : `Nothing in ${store.scopeLabel()} yet.`)}</div>`;
   };
 
   main.querySelector('#pq').addEventListener('input', (e) => { q = e.target.value; draw(); });
@@ -39,7 +39,7 @@ function projectCard(p) {
   return `<a href="#/projects/${p.id}/board" class="card block p-4 transition hover:border-sky-400 hover:shadow-sm dark:hover:border-sky-500">
     <div class="flex items-start gap-2">
       <div class="min-w-0 flex-1">
-        <div class="text-[11px] font-medium text-slate-500 dark:text-slate-400">${esc(p.code)}${p.client ? ` · ${esc(p.client)}` : ''}</div>
+        <div class="text-[11px] font-medium text-slate-500 dark:text-slate-400">${esc(p.code)}${p.area ? ` · ${esc(p.area)}` : ''}${p.client ? ` · ${esc(p.client)}` : ''}</div>
         <div class="truncate font-semibold text-slate-900 dark:text-white">${esc(p.name)}</div>
       </div>
       ${badge(HEALTH, s.health)}
@@ -64,6 +64,7 @@ function projectFields(p) {
     { name: 'name', label: 'Project name', value: p.name, required: true, full: true },
     { name: 'client', label: 'Client / department', value: p.client },
     { name: 'manager', label: 'Project manager', value: p.manager },
+    { name: 'area', label: 'Area', type: 'select', options: areaOptions(p.area), value: p.area || '' },
     { name: 'start', label: 'Start date', type: 'date', value: p.start, required: true },
     { name: 'end', label: 'End date', type: 'date', value: p.end, required: true },
     { name: 'budget', label: 'Budget', type: 'number', min: 0, step: '0.01', value: p.budget ?? 0 },
@@ -71,12 +72,19 @@ function projectFields(p) {
   ];
 }
 
+// Keeps a project's current area selectable even when it isn't in Settings, so saving doesn't erase it.
+function areaOptions(current) {
+  const opts = [{ value: '', label: 'No area' }, ...store.areas().map((a) => ({ value: a.name, label: `${a.name} (${a.manager || 'no manager'})` }))];
+  if (current && !store.areas().some((a) => a.name === current)) opts.push({ value: current, label: `${current} (not in Settings)` });
+  return opts;
+}
+
 const validateProject = (v) => (v.end < v.start ? 'End date must be on or after the start date.' : null);
 
 export async function newProject() {
   const v = await formModal({
     title: 'New project',
-    fields: projectFields({ code: store.nextProjectCode(), status: 'planning', start: today(), end: addDays(today(), 90) }),
+    fields: projectFields({ code: store.nextProjectCode(), status: 'planning', start: today(), end: addDays(today(), 90), area: store.viewAs().area, manager: store.viewAs().manager }),
     submitLabel: 'Create project',
     validate: validateProject,
   });

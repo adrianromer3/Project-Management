@@ -17,6 +17,10 @@ export function render(main, id, tab) {
     main.innerHTML = empty('Project not found', 'It may have been deleted.', '<a class="btn" href="#/projects">Back to projects</a>');
     return 'Not found';
   }
+  if (!store.inScope(p)) {
+    main.innerHTML = empty('Not in your view', `${p.code} is outside ${store.scopeLabel()}. Switch "Viewing as" to see it.`, '<a class="btn" href="#/dashboard">Back to dashboard</a>');
+    return 'Not in your view';
+  }
   if (!TABS.some(([k]) => k === tab)) tab = 'board';
   const s = store.projectStats(p);
 

@@ -1,4 +1,4 @@
-// App shell: hash router, sidebar nav, theme toggle, mobile drawer.
+// App shell: hash router, sidebar nav, "viewing as" switcher, theme toggle, mobile drawer.
 // Routes: #/dashboard · #/projects · #/projects/:id/:tab · #/gantt · #/settings
 
 import * as store from './store.js';
@@ -31,6 +31,7 @@ function render() {
   destroyCharts();
   applyChartTheme();
 
+  renderViewAs();
   let title;
   if (page === 'projects' && id) title = project.render(main, id, tab);
   else if (page === 'projects') title = projects.render(main);
@@ -44,7 +45,7 @@ function render() {
 }
 
 function renderNav(active) {
-  const projects = store.all('projects').filter((p) => p.status !== 'completed')
+  const projects = store.visibleProjects().filter((p) => p.status !== 'completed')
     .sort((a, b) => String(a.code).localeCompare(String(b.code)));
   const { id } = route();
   document.getElementById('nav').innerHTML = `
@@ -56,6 +57,26 @@ function renderNav(active) {
     ${projects.map((p) => `<a href="#/projects/${p.id}/board" class="flex items-center gap-2 rounded-lg px-3 py-1.5 ${p.id === id ? 'bg-white/10 text-white' : 'hover:bg-white/5 hover:text-white'}">
       <span class="shrink-0 whitespace-nowrap text-[11px] text-slate-500">${esc(p.code)}</span><span class="truncate">${esc(p.name)}</span></a>`).join('')}`;
 }
+
+// ---- Viewing as (Head Office → Area Manager → Project Manager) --------------
+// Option values: "head", "area:<area name>", "pm:<manager name>".
+
+const viewAsSelect = document.getElementById('view-as');
+
+function renderViewAs() {
+  const v = store.viewAs();
+  const cur = v.role === 'area' ? `area:${v.area}` : v.role === 'pm' ? `pm:${v.manager}` : 'head';
+  const opt = (value, label) => `<option value="${esc(value)}" ${value === cur ? 'selected' : ''}>${esc(label)}</option>`;
+  viewAsSelect.innerHTML = `${opt('head', `${store.ROLES.head} (all areas)`)}
+    <optgroup label="${store.ROLES.area}">${store.areas().map((a) => opt(`area:${a.name}`, `${a.manager || 'Unassigned'} · ${a.name}`)).join('')}</optgroup>
+    <optgroup label="${store.ROLES.pm}">${store.projectManagers().map((m) => opt(`pm:${m}`, m)).join('')}</optgroup>`;
+}
+
+viewAsSelect.addEventListener('change', (e) => {
+  const [role, ...rest] = e.target.value.split(':');
+  const name = rest.join(':');
+  store.setViewAs(role === 'area' ? { role, area: name } : role === 'pm' ? { role, manager: name } : { role: 'head' });
+});
 
 // ---- Theme & drawer --------------------------------------------------------
 

@@ -1,11 +1,12 @@
 // localStorage-backed data store. Three collections (projects, tasks, costs) plus settings.
 // Every write goes through commit(), which saves and notifies subscribers (the app re-renders).
+// Settings also hold the areas (each with an area manager) and the current "viewing as" scope.
 
 import { uid, clamp, sum, today, addDays, daysBetween } from './util.js';
 
 const KEY = 'pm:v1:data';
 const COLLECTIONS = ['projects', 'tasks', 'costs'];
-const DEFAULT_SETTINGS = { currency: 'PHP' };
+const DEFAULT_SETTINGS = { currency: 'PHP', areas: [], viewAs: { role: 'head' } };
 const listeners = new Set();
 
 let state = load();
@@ -19,6 +20,8 @@ function normalize(d) {
   if (!d || typeof d !== 'object') return s;
   for (const c of COLLECTIONS) s[c] = Array.isArray(d[c]) ? d[c] : [];
   s.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
+  if (!Array.isArray(s.settings.areas)) s.settings.areas = [];
+  if (!s.settings.viewAs?.role) s.settings.viewAs = { role: 'head' };
   return s;
 }
 
@@ -78,6 +81,60 @@ export function remove(c, id) {
 export const settings = () => state.settings;
 export function setSettings(patch) { Object.assign(state.settings, patch); commit(); }
 
+// ---- Areas & viewing scope ------------------------------------------------
+// Hierarchy: Head Office sees every project, an Area Manager sees the projects
+// in their area, a Project Manager sees the projects they manage.
+
+export const ROLES = { head: 'Head Office', area: 'Area Manager', pm: 'Project Manager' };
+
+export const areas = () => state.settings.areas;
+export const areaOf = (p) => areas().find((a) => a.name === p.area);
+
+// Saving under a new name moves that area's projects (and the current scope) along with it.
+export function saveArea(oldName, area) {
+  const list = state.settings.areas;
+  const i = list.findIndex((a) => a.name === oldName);
+  if (i >= 0) list[i] = area; else list.push(area);
+  if (oldName && oldName !== area.name) {
+    state.projects.forEach((p) => { if (p.area === oldName) p.area = area.name; });
+    if (state.settings.viewAs.area === oldName) state.settings.viewAs = { role: 'area', area: area.name };
+  }
+  commit();
+}
+
+export function removeArea(name) {
+  state.settings.areas = state.settings.areas.filter((a) => a.name !== name);
+  state.projects.forEach((p) => { if (p.area === name) p.area = ''; });
+  if (state.settings.viewAs.area === name) state.settings.viewAs = { role: 'head' };
+  commit();
+}
+
+export const projectManagers = () => [...new Set(state.projects.map((p) => p.manager).filter(Boolean))].sort();
+
+// A saved scope whose area or project manager no longer exists falls back to Head Office,
+// so the dashboard never filters on someone the "Viewing as" menu can't show.
+export function viewAs() {
+  const v = state.settings.viewAs;
+  if (v.role === 'area' && areas().some((a) => a.name === v.area)) return v;
+  if (v.role === 'pm' && projectManagers().includes(v.manager)) return v;
+  return { role: 'head' };
+}
+export function setViewAs(v) { state.settings.viewAs = v; commit(); }
+
+export function inScope(p, v = viewAs()) {
+  if (v.role === 'area') return p.area === v.area;
+  if (v.role === 'pm') return p.manager === v.manager;
+  return true;
+}
+
+export const visibleProjects = () => state.projects.filter((p) => inScope(p));
+
+export function scopeLabel(v = viewAs()) {
+  if (v.role === 'area') return `${ROLES.area} · ${areas().find((a) => a.name === v.area)?.manager || 'Unassigned'} (${v.area})`;
+  if (v.role === 'pm') return `${ROLES.pm} · ${v.manager}`;
+  return `${ROLES.head} · All areas`;
+}
+
 export function nextProjectCode() {
   const n = Math.max(0, ...state.projects.map((p) => parseInt(String(p.code).replace(/\D/g, ''), 10) || 0));
   return `PRJ-${String(n + 1).padStart(3, '0')}`;
@@ -99,7 +156,7 @@ export function resetSample() { state = sample(); commit(); }
 export function clearAll() {
   const keep = state.settings;
   state = blank();
-  state.settings = keep;
+  state.settings = { ...keep, viewAs: { role: 'head' } };
   commit();
 }
 
@@ -136,9 +193,13 @@ function sample() {
   const t0 = today();
   const d = (n) => addDays(t0, n);
   const now = new Date().toISOString();
+  s.settings.areas = [
+    { name: 'Metro Manila', manager: 'Grace Mendoza' },
+    { name: 'North Luzon', manager: 'Rafael Ortiz' },
+  ];
 
-  const P = (code, name, client, manager, status, start, end, budget, description) => {
-    const p = { id: uid('project'), code, name, client, manager, status, start: d(start), end: d(end), budget, description, createdAt: now };
+  const P = (code, name, client, manager, status, start, end, budget, description, area) => {
+    const p = { id: uid('project'), code, name, client, manager, area, status, start: d(start), end: d(end), budget, description, createdAt: now };
     s.projects.push(p);
     return p.id;
   };
@@ -149,7 +210,7 @@ function sample() {
   });
   const C = (projectId, date, category, description, amount) => s.costs.push({ id: uid('cost'), projectId, date: d(date), category, description, amount, createdAt: now });
 
-  const web = P('PRJ-001', 'Website Redesign', 'Marketing', 'Ana Reyes', 'active', -30, 45, 850000, 'New public website with refreshed brand, CMS and online enquiry forms.');
+  const web = P('PRJ-001', 'Website Redesign', 'Marketing', 'Ana Reyes', 'active', -30, 45, 850000, 'New public website with refreshed brand, CMS and online enquiry forms.', 'Metro Manila');
   T(web, 'Discovery & requirements', 'Ana Reyes', 'done', 'high', -30, -21);
   T(web, 'Wireframes', 'Ben Cruz', 'done', 'medium', -20, -11);
   T(web, 'Visual design', 'Ben Cruz', 'in-progress', 'high', -10, 5, 60);
@@ -163,7 +224,7 @@ function sample() {
   C(web, -5, 'equipment', 'Hosting & CDN (12 months)', 24000);
   C(web, -2, 'labor', 'Front-end contractor (sprint 1)', 95000);
 
-  const wh = P('PRJ-002', 'Warehouse Expansion – Phase 1', 'Operations', 'Dan Lim', 'active', -60, 120, 4500000, 'Add 1,200 m² of racked storage and a second loading bay.');
+  const wh = P('PRJ-002', 'Warehouse Expansion – Phase 1', 'Operations', 'Dan Lim', 'active', -60, 120, 4500000, 'Add 1,200 m² of racked storage and a second loading bay.', 'North Luzon');
   T(wh, 'Site survey', 'Dan Lim', 'done', 'medium', -60, -50);
   T(wh, 'Building permits', 'Ella Tan', 'review', 'urgent', -50, -5, 80);
   T(wh, 'Racking procurement', 'Carla Santos', 'in-progress', 'high', -30, 20, 50);
@@ -176,7 +237,7 @@ function sample() {
   C(wh, -25, 'materials', 'Racking supplier deposit (50%)', 1400000);
   C(wh, -10, 'subcontract', 'Civil works progress billing #1', 2700000);
 
-  const erp = P('PRJ-003', 'ERP Rollout', 'Finance', 'Ella Tan', 'planning', 14, 150, 1200000, 'Replace spreadsheets with an ERP for purchasing, inventory and accounting.');
+  const erp = P('PRJ-003', 'ERP Rollout', 'Finance', 'Ella Tan', 'planning', 14, 150, 1200000, 'Replace spreadsheets with an ERP for purchasing, inventory and accounting.', 'Metro Manila');
   T(erp, 'Vendor shortlist & demos', 'Ella Tan', 'in-progress', 'high', -7, 10, 40);
   T(erp, 'Data mapping', 'Dan Lim', 'todo', 'medium', 14, 45);
   T(erp, 'Configuration & testing', 'Carla Santos', 'todo', 'medium', 45, 110);
@@ -184,7 +245,7 @@ function sample() {
   T(erp, 'Go-live', 'Ella Tan', 'todo', 'urgent', null, 150, 0, true);
   C(erp, -3, 'other', 'Vendor demo travel', 12000);
 
-  const net = P('PRJ-004', 'Office Network Upgrade', 'IT', 'Ben Cruz', 'completed', -120, -40, 300000, 'Replace switches and Wi-Fi access points on all floors.');
+  const net = P('PRJ-004', 'Office Network Upgrade', 'IT', 'Ben Cruz', 'completed', -120, -40, 300000, 'Replace switches and Wi-Fi access points on all floors.', 'North Luzon');
   T(net, 'Network audit', 'Ben Cruz', 'done', 'medium', -120, -110);
   T(net, 'Hardware purchase', 'Ben Cruz', 'done', 'high', -105, -80);
   T(net, 'Install & cut-over', 'Carla Santos', 'done', 'high', -75, -40);
