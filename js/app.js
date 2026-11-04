@@ -1,5 +1,5 @@
 // App shell: hash router, sidebar nav, "viewing as" switcher, theme toggle, mobile drawer.
-// Routes: #/dashboard · #/projects · #/projects/:id/:tab · #/gantt · #/settings
+// Routes: #/dashboard · #/projects · #/projects/:id/:tab · #/reports · #/gantt · #/settings
 
 import * as store from './store.js';
 import { esc } from './util.js';
@@ -7,17 +7,19 @@ import { destroyCharts, applyChartTheme } from './ui.js';
 import * as dashboard from './pages/dashboard.js';
 import * as projects from './pages/projects.js';
 import * as project from './pages/project.js';
+import * as reports from './pages/reports.js';
 import * as settings from './pages/settings.js';
 import * as ganttPage from './pages/gantt.js';
 
 const ICON = {
   dashboard: '<path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 7h6V4h-6z"/>',
   projects: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  reports: '<path d="M6 3h8l5 5v13H6zM14 3v5h5M9 13h6M9 17h6"/>',
   gantt: '<path d="M4 6h8M8 12h10M6 18h7"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
 // Gantt sits under On-going Projects in the sidebar rather than in NAV.
-const NAV = [['dashboard', 'Dashboard'], ['projects', 'Projects'], ['settings', 'Settings']];
+const NAV = [['dashboard', 'Dashboard'], ['projects', 'Projects'], ['reports', 'Reports'], ['settings', 'Settings']];
 
 const main = document.getElementById('main');
 
@@ -35,13 +37,14 @@ function render() {
   let title;
   if (page === 'projects' && id) title = project.render(main, id, tab);
   else if (page === 'projects') title = projects.render(main);
+  else if (page === 'reports') title = reports.render(main);
   else if (page === 'settings') title = settings.render(main);
   else if (page === 'gantt') title = ganttPage.render(main);
   else title = dashboard.render(main);
 
   document.getElementById('page-title').textContent = title;
   document.title = `${title} · Project Management`;
-  renderNav(['projects', 'settings', 'gantt'].includes(page) ? page : 'dashboard');
+  renderNav(['projects', 'reports', 'settings', 'gantt'].includes(page) ? page : 'dashboard');
 }
 
 function renderNav(active) {

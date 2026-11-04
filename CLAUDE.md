@@ -12,7 +12,7 @@ Client-side project management app. Plain HTML + Tailwind CDN + vanilla ES modul
 - Collections: `projects`, `tasks` (`projectId`), `costs` (`projectId`). Deleting a project cascades to its tasks and costs.
 - Derived numbers (progress, health, spent, overdue) come from `store.projectStats(p)` and are never stored.
 - Each page module exports `render(main, ...)`, which returns the page title.
-- Routes: `#/dashboard`, `#/projects`, `#/projects/:id/(board|list|timeline|budget|report)`, `#/gantt`, `#/settings`.
+- Routes: `#/dashboard`, `#/projects`, `#/projects/:id/(board|list|timeline|budget|report)`, `#/reports`, `#/gantt`, `#/settings`.
 - Status reports: `buildReport(p)` in `js/report.js` is the single source for the Report tab and for the PDF, PowerPoint and Excel exports in `js/report-export.js`. Written notes are saved on `project.report`; numbers are always live. Export libraries (pdfmake, PptxGenJS, ExcelJS) load from the CDN on first use, not at page load.
 - Viewing hierarchy: `settings.regions` holds `{ name, manager }` (the manager is the region's Area Manager; defaults in `store.REGIONS`); each project has a `region`. `settings.viewAs` is `{ role: 'head' }`, `{ role: 'area', region }` or `{ role: 'pm', manager }`. The dashboard breaks each level down one level lower: Head Office by region, Area Manager by project manager, Project Manager by project. Pages list projects with `store.visibleProjects()` (never `all('projects')`), and scope tasks to those project ids.
 - Saved data is versioned (`VERSION` in `store.js`); `normalize()` upgrades older saves and imported backups (v1 used `areas`/`area`).

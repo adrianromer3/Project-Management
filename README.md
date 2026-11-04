@@ -9,11 +9,13 @@ Plain HTML, Tailwind CSS (CDN), vanilla JavaScript ES modules and Chart.js. **No
 - **Dashboard**: active projects, open and overdue tasks, project progress, a highlighted budget row (total budget, actual spent, budget utilization), budget vs actual chart, task status mix, a Gantt chart with one row per on-going project, a project health table with project managers, and lists of overdue and upcoming tasks.
 - **Gantt chart (all)**: every on-going project with its tasks on one timeline. Opened from the sidebar under On-going Projects.
 - **Projects**: searchable, filterable cards with health, progress, task counts and budget used.
-- **Project detail**, with four views:
+- **Reports**: every project in view, each linking straight to its status report.
+- **Project detail**, with five views:
   - **Board**: Kanban (To do → In progress → Review → Done) with drag and drop.
   - **List**: sortable task table with inline status changes.
   - **Timeline**: Gantt chart with month grid, progress fill, milestones (◆), overdue highlighting and a today line.
   - **Budget**: budget, spent, remaining and variance, spend by category, and cost entries.
+  - **Report**: status report with written notes and live numbers, exported to PDF, PowerPoint or Excel.
 - **Settings**: currency, JSON backup export/import, load sample data, clear all.
 - Dark mode, responsive layout with a mobile drawer.
 
@@ -51,5 +53,7 @@ js/store.js         localStorage data store, CRUD, import/export, metrics, sampl
 js/ui.js            Labels/colours, formatters, HTML builders, modals, toasts, charts
 js/util.js          Escaping, dates, ids
 js/gantt.js         Shared Gantt renderer (project timeline, dashboard, Gantt page)
-js/pages/           dashboard, projects, project (board/list/timeline/budget), gantt, settings
+js/report.js        Status report data, shared by the Report tab and exports
+js/report-export.js PDF, PowerPoint and Excel exports
+js/pages/           dashboard, projects, project (board/list/timeline/budget/report), reports, gantt, settings
 ```
