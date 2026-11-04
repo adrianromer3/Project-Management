@@ -2,7 +2,7 @@
 
 import * as store from '../store.js';
 import { esc, today } from '../util.js';
-import { card, confirmDialog, formModal, toast } from '../ui.js';
+import { card, confirmDialog, downloadBlob, formModal, toast } from '../ui.js';
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const CURRENCIES = 
@@ -38,12 +38,7 @@ export function render(main) {
   main.querySelectorAll('[data-region]').forEach((b) => b.addEventListener('click', () => editRegion(store.regions()[b.dataset.region])));
 
   main.querySelector('#export').addEventListener('click', () => {
-    const url = URL.createObjectURL(new Blob([store.exportData()], { type: 'application/json' }));
-    const a = Object.assign(document.createElement('a'), { href: url, download: `project-management-${today()}.json` });
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(new Blob([store.exportData()], { type: 'application/json' }), `project-management-${today()}.json`);
   });
 
   main.querySelector('#import').addEventListener('change', async (e) => {

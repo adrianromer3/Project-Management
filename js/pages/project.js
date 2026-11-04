@@ -1,4 +1,4 @@
-// Project detail: header + summary, then Board / List / Timeline / Budget tabs.
+// Project detail: header + summary, then Board / List / Timeline / Budget / Report tabs.
 
 import * as store from '../store.js';
 import { esc, sum, today, addDays, daysBetween, byDue } from '../util.js';
@@ -8,8 +8,10 @@ import {
 } from '../ui.js';
 import { editProject, deleteProject } from './projects.js';
 import { gantt, taskBar, sortTasks, legend } from '../gantt.js';
+import { buildReport } from '../report.js';
+import { exportReport } from '../report-export.js';
 
-const TABS = [['board', 'Board'], ['list', 'List'], ['timeline', 'Timeline'], ['budget', 'Budget']];
+const TABS = [['board', 'Board'], ['list', 'List'], ['timeline', 'Timeline'], ['budget', 'Budget'], ['report', 'Report']];
 
 export function render(main, id, tab) {
   const p = store.get('projects', id);
@@ -54,7 +56,7 @@ export function render(main, id, tab) {
   main.querySelector('[data-action=delete]').addEventListener('click', () => deleteProject(p));
   main.querySelector('[data-action=add-task]').addEventListener('click', () => openTask(p));
 
-  ({ board, list, timeline, budget })[tab](main.querySelector('#tab'), p, s);
+  ({ board, list, timeline, budget, report })[tab](main.querySelector('#tab'), p, s);
   return p.name;
 }
 
@@ -258,4 +260,75 @@ function budget(el, p, s) {
     r.addEventListener('click', open);
     r.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
   });
+}
+
+// ---- Status report ---------------------------------------------------------
+// Numbers are live; the written notes are saved on project.report. An exported file is the
+// point-in-time record.
+
+const EXPORTS = [['pdf', 'PDF'], ['pptx', 'PowerPoint'], ['xlsx', 'Excel']];
+
+async function editReport(p) {
+  const n = p.report || {};
+  const v = await formModal({
+    title: `Status report · ${p.code}`,
+    fields: [
+      { name: 'summary', label: 'Summary', type: 'textarea', value: n.summary },
+      { name: 'accomplishments', label: 'Accomplishments (one per line)', type: 'textarea', value: n.accomplishments },
+      { name: 'nextSteps', label: 'Next steps (one per line)', type: 'textarea', value: n.nextSteps },
+      { name: 'risks', label: 'Risks & issues (one per line)', type: 'textarea', value: n.risks },
+    ],
+    submitLabel: 'Save report',
+  });
+  if (!v) return;
+  store.update('projects', p.id, { report: v });
+  toast('Report saved');
+}
+
+function report(el, p) {
+  const r = buildReport(p);
+  const bulletCard = (title, items) => card(title, items.length
+    ? `<ul class="list-disc space-y-1 pl-5 text-sm">${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`
+    : '<p class="text-sm text-slate-500 dark:text-slate-400">Nothing written yet.</p>');
+  const taskRows = (rows, none) => (rows.length
+    ? `<ul class="divide-y divide-slate-100 text-sm dark:divide-slate-800">${rows.map((t) => `<li class="flex items-center gap-3 py-2">
+        <div class="min-w-0 flex-1"><div class="truncate font-medium">${esc(t.title)}</div><div class="truncate text-xs text-slate-500 dark:text-slate-400">${esc(t.assignee || 'Unassigned')} · ${esc(t.status)}</div></div>
+        <span class="whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">${fmtDate(t.due)}</span></li>`).join('')}</ul>`
+    : `<p class="text-sm text-slate-500 dark:text-slate-400">${esc(none)}</p>`);
+
+  el.innerHTML = `
+    <div class="card flex flex-wrap items-center gap-2 p-4">
+      <div class="min-w-0 flex-1"><h3 class="text-sm font-semibold text-slate-900 dark:text-white">Status report</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Status as of ${fmtDate(r.asOf)}. Numbers update from the project; you write the notes.</p></div>
+      <button data-edit-report class="btn">Edit report</button>
+      ${EXPORTS.map(([k, label]) => `<button data-export="${k}" class="btn btn-primary">${label}</button>`).join('')}
+    </div>
+    <div class="mt-4">${card('Summary', r.summary ? `<p class="whitespace-pre-line text-sm">${esc(r.summary)}</p>` : '<p class="text-sm text-slate-500 dark:text-slate-400">Nothing written yet.</p>')}</div>
+    <div class="mt-4 grid gap-4 lg:grid-cols-3">
+      ${bulletCard('Accomplishments', r.accomplishments)}
+      ${bulletCard('Next steps', r.nextSteps)}
+      ${bulletCard('Risks & issues', r.risks)}
+    </div>
+    <div class="mt-4 grid gap-4 lg:grid-cols-3">
+      ${card('Milestones', taskRows(r.milestones, 'No milestones.'))}
+      ${card(`Overdue tasks (${r.overdue.length})`, taskRows(r.overdue, 'Nothing overdue.'))}
+      ${card(`Due in the next 14 days (${r.upcoming.length})`, taskRows(r.upcoming, 'Nothing due soon.'))}
+    </div>`;
+
+  el.querySelector('[data-edit-report]').addEventListener('click', () => editReport(p));
+  el.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', async () => {
+    const label = b.textContent;
+    b.disabled = true;
+    b.textContent = 'Exporting…';
+    try {
+      await exportReport(b.dataset.export, buildReport(p));
+      toast(`${label} report downloaded`);
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'Could not create the file', 'error');
+    } finally {
+      b.disabled = false;
+      b.textContent = label;
+    }
+  }));
 }
