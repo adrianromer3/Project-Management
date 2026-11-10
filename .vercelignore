@@ -1,0 +1,5 @@
+# Only the app itself is deployed; everything else in this folder stays local.
+/*
+!index.html
+!css
+!js
